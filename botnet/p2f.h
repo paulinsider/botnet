@@ -331,7 +331,7 @@ struct packet_data{
 	unsigned int payload_size;
 	unsigned char* payload;
 	unsigned int http_status_code;
-	unsigned long time;
+	struct timeval time;
 	unsigned int flow;
 };
 #endif /* P2F_H */

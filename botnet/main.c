@@ -14,17 +14,18 @@
 #include <time.h>
 /* prototype of the packet handler */
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
-static struct flow_record *process_tcp(const struct pcap_pkthdr *h, const u_char *tcp_start, int tcp_len, struct flow_key *key);
+static struct flow_record *process_tcp(const struct pcap_pkthdr *h, const u_char *tcp_start, int tcp_len, struct flow_key *key, struct packet_data *save_data);
+static struct flow_record *process_udp(const struct pcap_pkthdr *h, const u_char *udp_start, int udp_len, struct flow_key *key, struct packet_data *save_data);
 void print_hex_ascii_line(const unsigned char *data, int len, int offset);
 static void print_payload(const unsigned char *payload, int len);
 void check_table();
-void create_packet(struct packet_data *save_data);
-int create_flow();
-void update_flow(struct flow_record *flow);
+void create_packet(struct packet_data *save_data, int udp);
+int create_session();
+void update_session(struct flow_record *flow);
 
 int number = 0;
 struct flow_record *record_root; //记录flow流的起始节点
-char ip_string[17] = "";
+char ip_string[100] = "";
 
 #define IPTOSBUFFERS    12
 char *iptos(u_long in)
@@ -37,6 +38,31 @@ char *iptos(u_long in)
 	which = (which + 1 == IPTOSBUFFERS ? 0 : which + 1);
 	sprintf(output[which], "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
 	return output[which];
+}
+char* time2char(struct timeval x)
+{
+	char tt[20] = "";
+	char tmp[20] = "";
+	strcat(tt, _itoa(x.tv_sec, tmp, 10));
+	strcat(tt, ".");
+	strcat(tt, _itoa(x.tv_usec, tmp, 10));
+	return tt;
+}
+char* caltime(struct timeval start, struct timeval end)
+{
+	char res[20] = "";
+	struct timeval tmp;
+	if (start.tv_usec > end.tv_usec)
+	{
+		tmp.tv_sec = end.tv_sec - start.tv_sec;
+		tmp.tv_usec = 1000000 + end.tv_usec - start.tv_usec;
+	}
+	else
+	{
+		tmp.tv_sec = end.tv_sec - start.tv_sec;
+		tmp.tv_usec = end.tv_usec - start.tv_usec;
+	}
+	return time2char(tmp);
 }
 int main(int argc, char **argv)
 {
@@ -117,7 +143,7 @@ int main(int argc, char **argv)
 	}
 	else {
 		printf("请输入所要进行处理的pcap文件名：");
-		char filename[8] = "";
+		char filename[100] = "";
 		memset(filename, 0, sizeof(filename));
 		scanf("%s", filename);
 		adhandle = pcap_open_offline(filename,errbuf);
@@ -153,7 +179,8 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	save_data.sa = malloc(sizeof(char) * 20);
 	memset(save_data.sa, 0, 20);
 	/*获取当前时间戳*/
-	save_data.time = header->ts.tv_sec;
+	save_data.time = header->ts;
+
 
 	ip = (struct ip_hdr*)(pkt_data + ETHERNET_HDR_LEN);//获取头部信息
 	ip_hdr_len = ip_hdr_length(ip);//头部长度
@@ -212,10 +239,10 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 		//	update_all_tcp_features(tcp_feature_list);
 		//}
 		break;
-	/*case IPPROTO_UDP:
-		record = process_udp(header, transport_start, transport_len, &key);
+	case IPPROTO_UDP:
+		record = process_udp(header, transport_start, transport_len, &key, &save_data);
 		break;
-	case IPPROTO_ICMP:
+	/*case IPPROTO_ICMP:
 		record = process_icmp(header, transport_start, transport_len, &key);
 		break;
 	case IPPROTO_IP:*/
@@ -263,7 +290,7 @@ static struct flow_record *process_tcp(const struct pcap_pkthdr *h, const u_char
 	if (tcp->tcp_flags & TCP_CWR) { printf("CWR "); }
 	printf("\n");*/
 	save_data->flag = 0;
-	save_data->flag = atoi(&(tcp->tcp_flags));
+	save_data->flag = (int)tcp->tcp_flags;
 	if ((tcp->tcp_flags & 0xFD) == 0) { //只有SYN时 新建流
 		create_flag = 1;
 	}
@@ -279,8 +306,8 @@ static struct flow_record *process_tcp(const struct pcap_pkthdr *h, const u_char
 	record = flow_key_get_record(key, record_root);//寻找是否有该数据包是否是已经存在的流的
 	if (record == NULL) {
 		record = create_new_records(key, record_root); //创建新的流
-		record->start.tv_sec = save_data->time;
-		record->end.tv_sec = save_data->time;
+		record->start = save_data->time;
+		record->end = save_data->time;
 		record->np = 1;
 		record->num_bytes = save_data->ip_len;
 		record->nps = 1;
@@ -289,15 +316,15 @@ static struct flow_record *process_tcp(const struct pcap_pkthdr *h, const u_char
 	else if (create_flag == 1){ //为syn时删除旧流穿件新流
 		delete_record(record, record_root);
 		record = create_new_records(key, record_root);
-		record->start.tv_sec = save_data->time;
-		record->end.tv_sec = save_data->time;
+		record->start = save_data->time;
+		record->end = save_data->time;
 		record->np = 1;
 		record->num_bytes = save_data->ip_len;
 		record->nps = 1;
 		record->nbs = save_data->ip_len;
 	}
 	else{
-		record->end.tv_sec = save_data->time;
+		record->end = save_data->time;
 		record->np++;
 		record->num_bytes += save_data->ip_len;
 		if (record->key.sa.s_addr == key->sa.s_addr)
@@ -316,6 +343,7 @@ static struct flow_record *process_tcp(const struct pcap_pkthdr *h, const u_char
 	//printf("sa:%s\nda:%s\nsp:%d\ndp:%d\nproto:%d\nip_len:%d\nip_hdr_len:%d\ntcp_len:%d\ntcp_hdr_len:%d\nflag:%d\npayload_size:%d\npayload:%s\n\n", save_data->sa, save_data->da, save_data->sp, save_data->dp, save_data->proto, save_data->ip_len, save_data->ip_hdr_len, save_data->tcp_len, save_data->tcp_hdr_len, save_data->flag, save_data->payload_size, save_data->payload);
 	//fclose(fp);
 	char http_code[3] = "";
+	save_data->http_status_code = 0;
 	if (save_data->payload[0] == 'H' && save_data->payload[1] == 'T' &&save_data->payload[2] == 'T' &&save_data->payload[3] == 'P') {
 		int i = 0;
 		for (i = 0; i < 10; i++)
@@ -331,8 +359,8 @@ static struct flow_record *process_tcp(const struct pcap_pkthdr *h, const u_char
 		save_data->http_status_code = atoi(http_code);
 	}
 	save_data->flow = record->id;
-	create_packet(save_data);
-	update_flow(record);
+	create_packet(save_data, 0);
+	update_session(record);
 	return record;
 }
 
@@ -413,7 +441,7 @@ void print_hex_ascii_line(const unsigned char *data, int len, int offset) {
 
 void check_table() {
 	
-	char url[100] = "/bishe/check_table.php?tablename=";
+	char url[200] = "/bishe/check_table.php?tablename=";
 	strcat(url, ip_string);
 	HINTERNET hInternet = InternetOpen("Testing", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0); //初始化WinINet
 	HINTERNET hConnect = InternetConnect(hInternet, "112.74.63.70", INTERNET_DEFAULT_HTTP_PORT,
@@ -421,27 +449,23 @@ void check_table() {
 	HINTERNET hOpenRequest = HttpOpenRequest(hConnect, "GET", url, HTTP_VERSION, NULL,
 		0, INTERNET_FLAG_DONT_CACHE, 1); //创建http请求
 	BOOL bRequest = HttpSendRequest(hOpenRequest, NULL, 0, NULL, 0); //发送http请求
-	char szBuffer[1024] = { 0 };
-	DWORD dwByteRead = 0;
-	FILE* fp = NULL;
-	fopen_s(&fp, "1.html", "w");
-	while (InternetReadFile(hOpenRequest, szBuffer, sizeof(szBuffer), &dwByteRead) && dwByteRead > 0)
-	{
-		fwrite(szBuffer, dwByteRead, 1, fp);
-		ZeroMemory(szBuffer, dwByteRead);
-	}
 	InternetCloseHandle(hInternet);
 	InternetCloseHandle(hConnect);
 	InternetCloseHandle(hOpenRequest);
-	fclose(fp);
 }
 
-void create_packet(struct packet_data *save_data)
+void create_packet(struct packet_data *save_data, int udp)
 {
 	char options[655350] = "tablename=";
 	char num[50];
 	int i = 0;
 	strcat(options, ip_string);
+	if (udp == 1){
+		strcat(options, "&udp=1");
+	}
+	else {
+		strcat(options, "&udp=0");
+	}
 	strcat(options, "&sa=");
 	strcat(options, save_data->sa);
 	strcat(options, "&da=");
@@ -474,11 +498,11 @@ void create_packet(struct packet_data *save_data)
 	strcat(options, _itoa(save_data->payload_size, num, 10));
 	strcat(options, "&time=");
 	memset(num, 0, sizeof(num));
-	strcat(options, _itoa(save_data->time, num, 10));
+	strcat(options, time2char(save_data->time));
 	strcat(options, "&http_status_code=");
 	memset(num, 0, sizeof(num));
 	strcat(options, _itoa(save_data->http_status_code, num, 10));
-	strcat(options, "&flow=");
+	strcat(options, "&session=");
 	memset(num, 0, sizeof(num));
 	strcat(options, _itoa(save_data->flow, num, 10));
 	strcat(options, "&payload=");
@@ -486,7 +510,7 @@ void create_packet(struct packet_data *save_data)
 	for (i = 0; i < save_data->payload_size; i++)
 	{
 		memset(tmp, 0, sizeof(tmp));
-		strcat(options, _itoa((int)save_data->payload[i], tmp, 10));
+		strcat(options, _itoa((int)save_data->payload[i], tmp, 16));
 		strcat(options, " ");
 	}
 	//strcat(options, save_data->payload);
@@ -501,28 +525,15 @@ void create_packet(struct packet_data *save_data)
 		0, INTERNET_FLAG_DONT_CACHE, 1); //创建http请求
 	char hdrs[] = "Content-Type: application/x-www-form-urlencoded";
 	BOOL bRequest = HttpSendRequest(hOpenRequest, hdrs, (DWORD)strlen(hdrs), options, (DWORD)strlen(options)); //发送http请求
-	char szBuffer[1024] = { 0 };
-	DWORD dwByteRead = 0;
-	FILE* fp = NULL;
-	fopen_s(&fp, "1.xml", "w");
-	while (InternetReadFile(hOpenRequest, szBuffer, sizeof(szBuffer), &dwByteRead) && dwByteRead > 0)
-	{
-		fwrite(szBuffer, dwByteRead, 1, fp);
-		ZeroMemory(szBuffer, dwByteRead);
-	}
-	fclose(fp);
-	FILE *fp1 = fopen("res.txt", "a+");
-	fprintf(fp1, "%d\n", number);
-	number++;
 	InternetCloseHandle(hInternet);
 	InternetCloseHandle(hConnect);
 	InternetCloseHandle(hOpenRequest);
-	fclose(fp1);
 }
 
-int create_flow() {
+int create_session() {
 	int num;
-	char url[100] = "/bishe/create_flow.php";
+	char url[200] = "/bishe/create_session.php?tablename=";
+	strcat(url, ip_string);
 	HINTERNET hInternet = InternetOpen("Testing", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0); //初始化WinINet
 	HINTERNET hConnect = InternetConnect(hInternet, "112.74.63.70", INTERNET_DEFAULT_HTTP_PORT,
 		NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0); //连接服务器
@@ -531,28 +542,22 @@ int create_flow() {
 	BOOL bRequest = HttpSendRequest(hOpenRequest, NULL, 0, NULL, 0); //发送http请求
 	char szBuffer[1024] = { 0 };
 	DWORD dwByteRead = 0;
-	FILE* fp = NULL;
-	fopen_s(&fp, "1.html", "w");
 	while (InternetReadFile(hOpenRequest, szBuffer, sizeof(szBuffer), &dwByteRead) && dwByteRead > 0)
 	{
-		fwrite(szBuffer, dwByteRead, 1, fp);
-		ZeroMemory(szBuffer, dwByteRead);
 	}
-	fclose(fp);
-	fopen_s(&fp, "1.html", "r");
-	fgets(szBuffer, 1024, fp);
 	num = atoi(szBuffer);
-	fclose(fp);
 	InternetCloseHandle(hInternet);
 	InternetCloseHandle(hConnect);
 	InternetCloseHandle(hOpenRequest);
 	return num;
 }
 
-void update_flow(struct flow_record *flow)
+void update_session(struct flow_record *flow)
 {
-	char options[655350] = "id=";
+	char options[655350] = "tablename=";
 	char num[50];
+	strcat(options, ip_string);
+	strcat(options, "&id=");
 	strcat(options, _itoa(flow->id, num, 10));
 	strcat(options, "&sa=");
 	strcat(options, inet_ntoa(flow->key.sa));
@@ -565,10 +570,10 @@ void update_flow(struct flow_record *flow)
 	strcat(options, _itoa(flow->key.dp, num, 10));
 	strcat(options, "&time=");
 	memset(num, 0, sizeof(num));
-	strcat(options, _itoa(flow->start.tv_sec, num, 10));
+	strcat(options, time2char(flow->start));
 	strcat(options, "&duration=");
 	memset(num, 0, sizeof(num));
-	strcat(options, _itoa((flow->end.tv_sec - flow->start.tv_sec), num, 10));
+	strcat(options, caltime(flow->start, flow->end));
 	strcat(options, "&np=");
 	memset(num, 0, sizeof(num));
 	strcat(options, _itoa(flow->np, num, 10));
@@ -590,28 +595,52 @@ void update_flow(struct flow_record *flow)
 	//printf("%s", options);
 
 	HINTERNET hInternet = InternetOpen("Testing", INTERNET_OPEN_TYPE_DIRECT, "http=", NULL, 0); //初始化WinINet
-	if (hInternet == NULL){
-		printf("dfasfsdafsadf");
-	}
 	char strSever[] = "112.74.63.70";
 	HINTERNET hConnect = InternetConnect(hInternet, strSever, INTERNET_DEFAULT_HTTP_PORT,
 		NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0); //连接服务器
-	char strObject[] = "/bishe/update_flow.php";
+	char strObject[] = "/bishe/update_session.php";
 	HINTERNET hOpenRequest = HttpOpenRequest(hConnect, "POST", strObject, HTTP_VERSION, NULL,
 	0, INTERNET_FLAG_DONT_CACHE, 1); //创建http请求
 	char hdrs[] = "Content-Type: application/x-www-form-urlencoded";
 	BOOL bRequest = HttpSendRequest(hOpenRequest, hdrs, (DWORD)strlen(hdrs), options, (DWORD)strlen(options)); //发送http请求
-	char szBuffer[1024] = { 0 };
-	DWORD dwByteRead = 0;
-	FILE* fp = NULL;
-	fopen_s(&fp, "1.xml", "w");
-	while (InternetReadFile(hOpenRequest, szBuffer, sizeof(szBuffer), &dwByteRead) && dwByteRead > 0)
-	{
-		fwrite(szBuffer, dwByteRead, 1, fp);
-		ZeroMemory(szBuffer, dwByteRead);
-	}
 	InternetCloseHandle(hInternet);
 	InternetCloseHandle(hConnect);
 	InternetCloseHandle(hOpenRequest);
-	fclose(fp);
+}
+
+static struct flow_record *process_udp(const struct pcap_pkthdr *h, const u_char *udp_start, int udp_len, struct flow_key *key, struct packet_data *save_data) {
+	unsigned int udp_hdr_len;
+	const unsigned char *payload;
+	unsigned int size_payload;
+	const struct udp_hdr *udp = (const struct udp_hdr *)udp_start;
+	struct flow_record *record = NULL;
+
+	udp_hdr_len = 8;
+	if (udp_len < 8) {
+		// fprintf(info, "   * Invalid UDP packet length: %u bytes\n", udp_len);
+		return NULL;
+	}
+	//这里的tcp其实是udp
+	save_data->tcp_len = udp_len;
+	save_data->tcp_hdr_len = udp_hdr_len;
+
+	payload = (udp_start + udp_hdr_len);
+	size_payload = udp_len - udp_hdr_len;
+
+	save_data->payload_size = size_payload;
+	save_data->payload = payload;
+
+	save_data->flag = -1;
+	/*
+	* Print payload data; it might be binary, so don't just
+	* treat it as a string.
+	*/
+	key->sp = ntohs(udp->src_port);
+	key->dp = ntohs(udp->dst_port);
+	save_data->sp = key->sp;
+	save_data->dp = key->dp;
+	save_data->http_status_code = 0;
+	save_data->flow = -1;
+	create_packet(save_data,1);
+	return record;
 }

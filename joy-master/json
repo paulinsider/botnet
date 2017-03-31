@@ -1,0 +1,243 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+
+    "sa" : {"type" : "string",
+            "description" : "IP Source Address, as a string. It MAY be in dotted quad notation, e.g. \"10.0.2.15\", or it MAY be an arbitrary hexadecimal JSON string, which will be the case when anonymization is used."
+           },
+
+    "da" : {"type" : "string",
+            "description" : "IP Destination Address, as a string. Its format is identical to the IP Source Address."
+           },
+
+    "x" : { "type" : "string",
+            "description" : "Timeout. a: active, i: inactive."
+          },
+
+    "pr" : {"type" : "number",
+            "description" : "IP Protocol number, as a JSON number. 6=tcp, 17=udp, and so on."
+           },
+
+    "sp" : {"type" : "number",
+            "description" : "TCP or UDP Source Port, as a JSON number."
+           },
+
+    "dp" : {"type" : "number",
+            "description" : "TCP or UDP Destination Port, as a JSON number."
+           },
+
+    "ob" : {"type" : "number",
+            "description" : "Number of bytes of outbound (source to destination) traffic, as a JSON number."
+           },
+
+    "op" : {"type" : "number",
+            "description" : "Number of packets of outbound (source to destination) traffic, as a JSON number."
+           },
+
+    "ib" : {"type" : "number",
+            "description" : "Number of bytes of inbound (destination to source) traffic, as a JSON number."
+           },
+
+    "ip" : {"type" : "number",
+            "description" : "Number of packets of inbound (destination to source) traffic, as a JSON number."
+           },
+
+    "ts" : {"type" : "number",
+            "description" : "Start time of the flow expressed as the number of seconds since the epoch (00:00:00 UTC, Thursday, 1 January 1970), as a JSON number. It SHOULD include a decimal part, and provide at least millisecond precision, e.g. 1411732528.590115"
+           },
+
+    "te" : {"type" : "number",
+            "description" : "End time of the flow expressed in the same way as the start time."
+           },
+
+    "be" : {"type" : "number",
+            "description" : "The empirical byte entropy estimate, expressed as a JSON number.  The number MUST be between 0.0 and 8.0."
+           },
+
+    "ottl" : {"type" : "number",
+              "description" : "The smallest outbound (source to destination) IP Time To Live (TTL) value observed for all packets in a flow."
+             },
+
+    "ittl" : {"type" : "number",
+              "description" : "The smallest inbound (destination to source) IP Time To Live (TTL) value observed for all packets in a flow."
+             },
+
+    "oidp" : {"type" : "string",
+              "description" : "The outbound initial data packet, including the IP header and all layers above it, expressed as a hexadecimal value in a JSON string.  For example, \"iidp\": 450000300268000080019758ac1047ebac1001010000a8e214180000e8d27a99d108000000000000000000001090fdff."
+             },
+
+    "oidp_len" : {"type" : "number",
+                  "description" : "The number of bytes in the outbound initial data packet."
+                 },
+
+    "iidp" : {"type" : "string",
+              "description" : "The inbound initial data packet, including the IP header and all layers above it, expressed as a hexadecimal value in a JSON string."
+             },
+
+    "iidp_len" : {"type" : "number",
+                  "description" : "The number of bytes in the inbound initial data packet."
+                 },
+
+    "o_probable_os" : {"type" : "string",
+                       "description" : "The operating system associated with the source address, as a JSON string."
+                      },
+
+    "i_probable_os" : {"type" : "string",
+                       "description" : "The operating system associated with the destination address, as a JSON string."
+                      },
+
+    "bd" : {"type" : "array",
+            "items" : {"type" : "number"},
+            "description" : "Byte Distribution"
+           },
+
+    "packets" : {"type" : "array",
+                 "items" : {"type" : "object",
+                            "properties" : {"b" : {"type" : "number"},
+                                            "dir" : {"type" : "string"},
+                                            "ipt" : {"type" : "number"}
+                                           }
+                           },
+                 "description" : "A JSON array of packet objects. Each packet object contains the number of bytes of data in the packet, expressed as the JSON number \"b\", the JSON string \"<\" or \">\" to indicate inbound or outbound directions, respectively, and the number of milliseconds between the arrival of this packet and the previous packet, expressed as the JSON number \"ipt\". An example of a packet object is {\"b\": 873, \"dir\": \">\", \"ipt\": 121 }.  The old name for this element is \"non_norm_stats\"."
+                },
+
+    "tls" : {"type" : "object",
+             "properties" : {"srlt" : {"type" : "array",
+                                       "items" : {"type" : "object",
+                                                  "properties" : {"b" : {"type" : "number"},
+                                                                  "dir" : {"type" : "string"},
+                                                                  "ipt" : {"type" : "number"},
+                                                                  "tp" : {"type" : "string"}
+                                                                 }
+							},
+                                       "description" : "The TLS records, expressed as a JSON array of TLS record objects. Those objects have a format that is similar to packet objects."
+                                      },
+
+                             "scs" : {"type" : "string",
+                                      "description" : "The selected ciphersuite from a TLS session, as four hexadecimal characters expressed as a JSON string, e.g. \"c00a\". This value is sent only by a TLS server."
+                                     },
+
+                             "cs" : {"type" : "array",
+                                     "items" : {"type" : "string"},
+                                     "description" : "The offered ciphersuites from a TLS session, expressed as a JSON array, each element of which is a JSON string containing four hexadecimal characters."
+                                    },
+
+                             "tls_osid" : {"type" : "string",
+                                           "description" : "The outbound TLS Session Identifier (SID)."
+                                          },
+
+                             "tls_isid" : {"type" : "string",
+                                           "description" : "The inbound TLS Session Identifier (SID)."
+                                          },
+
+                             "tls_iv" : {"type" : "number",
+                                         "description" : "Inbound TLS version, expressed as a JSON number, with the same mapping as the outbound TLS version."
+                                        },
+
+                             "tls_ov" : {"type" : "number",
+                                         "description" : "Outbound TLS version, expressed as a JSON number. These numbers map onto SSL/TLS versions as follows: unknown = 0, SSLv2 = 1, SSLv3 = 2, TLS1.0 = 3, TLS1.1 = 4, TLS1.2 = 5."
+                                        }
+                            }
+            },
+
+    "ohttp" : {"type": "object",
+               "title": "outbound HTTP headers.",
+               "description": "The HTTP headers from the first outbound HTTP packet of the flow.",
+               "properties": {"method": {"type": "string",
+	                      "title": "HTTP method",
+                              "description": "GET, POST, etc., or whatever string happenend to be in the packet, if the HTTP client is not adhering to the HTTP standard."
+                                        },
+
+                              "uri": {"type": "string",
+                                      "title": "Uniform Resource Identifier",
+                                      "description": "The URI that appeared in the packet, or whatever string happened to be in the packet, if the HTTP client is not adhering to the standard."
+                                     },
+
+                              "v": {"type": "string",
+                                    "title": "version",
+                                    "description": "HTTP/1.1, or whatever string happened to be in the packet, if the HTTP client did not adhere to the standard."
+                                   },
+
+                              "usernames": {"type": "array",
+                                            "title": "username array",
+                                            "description": "The (possibly anonymized) usernames (configured via the useranon option) that appeared in the HTTP headers.",
+                                            "items": {"type": "string",
+                                                      "title": "username",
+                                                      "description": "A (possibly anonymized) username that appeared in the HTTP headers."
+			                             }
+                                           },
+
+                              "body": {"type": "string",
+                                       "title": "Initial bytes of the HTTP body",
+                                       "description": "The first few bytes of the HTTP body, expressed as a hexadecimal string."
+                                      }
+                             },
+               "required": []
+              },
+
+    "ihttp": {"type": "object",
+              "title": "inbound HTTP headers.",
+              "description": "The HTTP headers from the first response message in a flow.",
+              "properties": {"v": {"type": "string",
+                                   "title": "version",
+                                   "description": "HTTP/1.1, or whatever string happened to be in the packet, if the HTTP client did not adhere to the standard."
+                                  },
+
+                             "code": {"type": "string",
+                                      "title": "response code",
+                                      "description": "The HTTP response code returned by the server."
+                                     },
+
+                             "reason": {"type": "string",
+                                        "title": "reason.",
+                                        "description": "The HTTP reason returned by the server."
+                                       },
+
+                             "body": {"type": "string",
+                                      "title": "Initial bytes of the HTTP body",
+                                      "description": "The first few bytes of the HTTP body, expressed as a hexadecimal string."
+                                     }
+                            },
+
+              "required": []
+             },
+
+    "dns": {"type": "array",
+            "title": "DNS data",
+            "description": "DNS name, address, and TTL information that appeared in this flow.",
+            "items": {"type": "object",
+                      "title": "DNS response",
+                      "description": "data from a particular DNS query/response",
+                      "properties": {"rn": {"type": "string",
+                                            "title": "response name",
+                                            "description": "DNS name"
+                                           },
+
+                                     "rc": {"type": "integer",
+                                            "title": "return code.",
+                                            "description": "The status code returned by the DNS server (0=no problem, other=error)."
+                                           },
+
+                                     "rr": {"type": "array",
+                                            "title": "response record.",
+                                            "description": "A DNS record.",
+                                            "items": {"type": "object",
+                                                      "title": "DNS record.",
+                                                      "description": "A record returned by the DNS server.",
+                                                      "properties": {"a": {"type": "string",
+                                                                           "title": "address.",
+                                                                           "description": "The IP address corresponding to the DNS name."
+                                                                          },
+
+                                                                     "ttl": {"type": "integer",
+                                                                             "title": "TTL",
+                                                                             "description": "Time To Live (TTL); the number of seconds that the address/name correspondence is to be considered valid."
+                                                                            }
+		                                                    }
+                                                     }
+                                           },
+
+                                     "required": []
+                                    }
+                     }
+           }
+}
