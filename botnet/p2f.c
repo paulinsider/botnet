@@ -176,7 +176,7 @@ struct flow_record* create_new_records(const struct flow_key *key, struct flow_r
 		tmp = tmp->next;
 	}
 	tmp->next = record;
-	record->id = create_flow();
+	record->id = create_session();
 	return record;
 }
 void delete_record(struct flow_record *record, struct flow_record *record_root)
